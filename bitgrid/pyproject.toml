@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bitgrid"
+version = "0.1.0"
+description = "Independent Python-only computation of 7-series tilegrid bits"
+requires-python = ">=3.8"
+license = {text = "ISC"}
+dependencies = ["pyyaml"]
+
+[project.optional-dependencies]
+rapidwright = ["rapidwright"]
+dev = ["pytest"]
+
+[project.scripts]
+bitgrid-partgen = "bitgrid.partgen.cli:main"
+bitgrid-designgen = "bitgrid.designgen.cli:main"
+bitgrid-bitsgen = "bitgrid.bitsgen.cli:main"
+bitgrid-verify = "bitgrid.verify.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["bitgrid*"]
