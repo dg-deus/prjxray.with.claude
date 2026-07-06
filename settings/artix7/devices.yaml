@@ -7,3 +7,10 @@
   fabric: "xc7a50t"
 "xc7a35t":
   fabric: "xc7a50t"
+"xc7a25t":
+  fabric: "xc7a25t"
+# The xc7a12t is the xc7a25t die with capacity capped in software
+# (Vivado reports the full 25t grid: 3650 slices, 45 BRAM36, 80 DSP48).
+# Fuzz the fabric on the uncapped xc7a25t; the 12t reuses its database.
+"xc7a12t":
+  fabric: "xc7a25t"
