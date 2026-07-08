@@ -7,7 +7,9 @@
 # SPDX-License-Identifier: ISC
 export XRAY_DATABASE="artix7"
 # The xc7a25t die is shared with the capacity-capped xc7a12t (see
-# settings/artix7/devices.yaml).  Fuzz the fabric on the uncapped 25t;
+# settings/artix7/devices.yaml; the shared fabric is named "xc7a12t").
+# Fuzz the fabric on the uncapped 25t part -- the capped 12t cannot
+# synthesize one specimen primitive per grid site (Synth 8-5833).
 # 12t parts only need the per-part fuzzers (000/001/075).
 export XRAY_PART="xc7a25tcsg325-1"
 export XRAY_ROI_FRAMES="0x00000000:0xffffffff"

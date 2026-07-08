@@ -7,10 +7,11 @@
   fabric: "xc7a50t"
 "xc7a35t":
   fabric: "xc7a50t"
+# The xc7a12t and xc7a25t share one die; the 12t is capacity-capped in
+# software only (Vivado reports the full grid for it: 3650 slices,
+# 45 BRAM36, 80 DSP48, but BLOCK_RAMS=20 limits synthesis).  The fabric
+# is fuzzed on the uncapped xc7a25t part and shared by both devices.
 "xc7a25t":
-  fabric: "xc7a25t"
-# The xc7a12t is the xc7a25t die with capacity capped in software
-# (Vivado reports the full 25t grid: 3650 slices, 45 BRAM36, 80 DSP48).
-# Fuzz the fabric on the uncapped xc7a25t; the 12t reuses its database.
+  fabric: "xc7a12t"
 "xc7a12t":
-  fabric: "xc7a25t"
+  fabric: "xc7a12t"
