@@ -7,10 +7,10 @@
 # SPDX-License-Identifier: ISC
 export XRAY_DATABASE="artix7"
 # The xc7a25t die is shared with the capacity-capped xc7a12t (see
-# settings/artix7/devices.yaml; the shared fabric is named "xc7a12t").
-# Fuzz the fabric on the uncapped 25t part -- the capped 12t cannot
-# synthesize one specimen primitive per grid site (Synth 8-5833).
-# 12t parts only need the per-part fuzzers (000/001/075).
+# settings/artix7/devices.yaml).  Fuzz the fabric on the uncapped 25t
+# part -- the capped 12t cannot synthesize one specimen primitive per
+# grid site (Synth 8-5833).  12t parts only need the per-part fuzzers
+# (settings/artix7_12t.sh + `make -C fuzzers roi_only`).
 export XRAY_PART="xc7a25tcsg325-1"
 export XRAY_ROI_FRAMES="0x00000000:0xffffffff"
 
@@ -25,13 +25,10 @@ export XRAY_EXCLUDE_ROI_TILEGRID=""
 # This needs to be changed for any new device!
 # If you have a FASM mismatch or unknown bits in IOIs, CHECK THIS FIRST.
 #
-# TODO(verify): placeholder pattern based on other artix7 parts (the low-Y
-# anomalous tile of each IO column).  Find the IO column coordinates with:
-#   link_design -part xc7a25tcsg325-1
-#   puts [lsort [get_tiles -filter {TYPE==LIOI3}]]
-#   puts [lsort [get_tiles -filter {TYPE==RIOI3}]]
-# then confirm against measured frame addresses after the first 005 run.
-export XRAY_IOI3_TILES="LIOI3_X0Y9"
+# The low-Y anomalous tile of each IO column (same pattern as the 50t).
+# Confirm both tiles exist (`get_tiles {LIOI3_X0Y9 RIOI3_X31Y9}`) and
+# check against measured frame addresses after the first 005 run.
+export XRAY_IOI3_TILES="LIOI3_X0Y9 RIOI3_X31Y9"
 
 source $(dirname ${BASH_SOURCE[0]})/../utils/environment.sh
 

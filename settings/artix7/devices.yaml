@@ -12,6 +12,6 @@
 # 45 BRAM36, 80 DSP48, but BLOCK_RAMS=20 limits synthesis).  The fabric
 # is fuzzed on the uncapped xc7a25t part and shared by both devices.
 "xc7a25t":
-  fabric: "xc7a12t"
+  fabric: "xc7a25t"
 "xc7a12t":
-  fabric: "xc7a12t"
+  fabric: "xc7a25t"
