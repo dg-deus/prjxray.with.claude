@@ -537,17 +537,25 @@ def run_fuzzer(fuzzer_name, fuzzer_dir, fuzzer_logdir, logger, will_retry):
     if '--jobserver-fds' in make_flags or '--jobserver-auth' in make_flags:
         job_re = re.search(
             '--jobserver-(?:fds|auth)=([0-9]+),([0-9]+)', make_flags)
-        assert job_re, make_flags
-        job_rd, job_wr = job_re.groups()
+        if job_re:
+            # GNU Make < 4.4 shares the jobserver as a pair of inherited
+            # pipe file descriptors which must be passed to the child.
+            job_rd, job_wr = job_re.groups()
 
-        # Make copies of jobserver FDs in case a retry is needed.
+            # Make copies of jobserver FDs in case a retry is needed.
 
-        job_rd = int(job_rd)
-        job_wr = int(job_wr)
-        assert job_rd > 2, (job_rd, job_wr, make_flags)
-        assert job_wr > 2, (job_rd, job_wr, make_flags)
-        job_fds.append(job_rd)
-        job_fds.append(job_wr)
+            job_rd = int(job_rd)
+            job_wr = int(job_wr)
+            assert job_rd > 2, (job_rd, job_wr, make_flags)
+            assert job_wr > 2, (job_rd, job_wr, make_flags)
+            job_fds.append(job_rd)
+            job_fds.append(job_wr)
+        else:
+            # GNU Make >= 4.4 uses a named pipe (--jobserver-auth=fifo:PATH)
+            # which the child opens by path via the inherited MAKEFLAGS --
+            # no file descriptors need to be passed down.
+            assert re.search(r'--jobserver-auth=fifo:',
+                             make_flags), make_flags
 
     p = None
     try:
