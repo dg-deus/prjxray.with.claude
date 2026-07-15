@@ -145,12 +145,21 @@ def generate_tileconn(device):
     return entries
 
 
-def verify_tileconn(device, entries):
+def verify_tileconn(device, entries, max_report=20):
     """Check that every rule holds at every matching grid location.
 
     tileconn.json is applied by pattern matching over the whole grid, so a
     (tile_types, grid_deltas, wire_pair) rule is only sound if the two
     wires are on the same node for *every* occurrence of the pattern.
+
+    The unit of failure is the RULE, not the grid location: one unsound
+    rule fails at all its instances, so reporting per location floods the
+    output while telling you nothing new.  For each rule this aggregates
+    over its instances, distinguishing "wires on different nodes" from
+    "wire has no node here", and prints one summary line per unsound rule
+    (up to max_report), followed by overall statistics.
+
+    Returns the number of unsound rules.
     """
     from com.xilinx.rapidwright.device import Node
 
@@ -159,11 +168,15 @@ def verify_tileconn(device, entries):
         tiles_by_type.setdefault(
             str(tile.getTileTypeEnum().name()), []).append(tile)
 
-    errors = 0
+    total_rules = 0
+    unsound_rules = 0
+
     for entry in entries:
         type1, type2 = entry['tile_types']
         dx, dy = entry['grid_deltas']
 
+        # Find all grid locations matching this entry's pattern once.
+        instances = []
         for tile1 in tiles_by_type[type1]:
             row = tile1.getRow() + dy
             col = tile1.getColumn() + dx
@@ -172,20 +185,50 @@ def verify_tileconn(device, entries):
                 continue
 
             tile2 = device.getTile(row, col)
-            if tile2 is None or str(tile2.getTileTypeEnum().name()) != type2:
-                continue
+            if tile2 is not None and str(
+                    tile2.getTileTypeEnum().name()) == type2:
+                instances.append((tile1, tile2))
 
-            for wire1, wire2 in entry['wire_pairs']:
-                node1 = Node.getNode(tile1, tile1.getWireIndex(wire1))
-                node2 = Node.getNode(tile2, tile2.getWireIndex(wire2))
-                if node1 is None or node2 is None or not node1.equals(node2):
+        for wire1, wire2 in entry['wire_pairs']:
+            total_rules += 1
+            ok = no_node = mismatch = 0
+            example = None
+
+            for tile1, tile2 in instances:
+                idx1 = tile1.getWireIndex(wire1)
+                idx2 = tile2.getWireIndex(wire2)
+                node1 = Node.getNode(tile1, idx1) if idx1 is not None else None
+                node2 = Node.getNode(tile2, idx2) if idx2 is not None else None
+
+                if node1 is None or node2 is None:
+                    no_node += 1
+                elif node1.equals(node2):
+                    ok += 1
+                else:
+                    mismatch += 1
+
+                if (node1 is None or node2 is None or mismatch) and \
+                        example is None:
+                    example = (tile1.getName(), tile2.getName())
+
+            if mismatch or no_node:
+                unsound_rules += 1
+                if unsound_rules <= max_report:
                     print(
-                        'ERROR: {} {}/{} <-> {}/{} not connected'.format(
-                            entry['grid_deltas'], tile1.getName(), wire1,
-                            tile2.getName(), wire2))
-                    errors += 1
+                        'UNSOUND: ({}, {}, {}) {} <-> {}: '
+                        'ok {}, different-node {}, no-node {} '
+                        'of {} instances, e.g. {} <-> {}'.format(
+                            type1, type2, entry['grid_deltas'], wire1,
+                            wire2, ok, mismatch, no_node, len(instances),
+                            example[0], example[1]))
 
-    return errors
+    if unsound_rules > max_report:
+        print('... {} more unsound rules not shown'.format(
+            unsound_rules - max_report))
+    print(
+        '{} of {} rules unsound'.format(unsound_rules, total_rules))
+
+    return unsound_rules
 
 
 def main():
