@@ -145,6 +145,30 @@ def generate_tileconn(device):
     return entries
 
 
+def load_tileconn(path):
+    """ Load an already-generated tileconn.json.
+
+    Returns entries in the exact form generate_tileconn() returns them:
+    a list of {'grid_deltas': [dx, dy], 'tile_types': [type1, type2],
+    'wire_pairs': [[wire1, wire2], ...]} dicts, sorted by
+    (type1, type2, dx, dy) with wire_pairs sorted, so a loaded file can be
+    passed to verify_tileconn() (or re-dumped) interchangeably with
+    freshly generated entries.
+    """
+    with open(path) as f:
+        entries = json.load(f)
+
+    for entry in entries:
+        entry['wire_pairs'] = sorted(
+            list(pair) for pair in entry['wire_pairs'])
+
+    entries.sort(
+        key=lambda entry: (
+            tuple(entry['tile_types']), tuple(entry['grid_deltas'])))
+
+    return entries
+
+
 def verify_tileconn(device, entries, max_report=20):
     """Check that every rule holds at every matching grid location.
 
