@@ -155,9 +155,28 @@ def verify_tileconn(device, entries, max_report=20):
     The unit of failure is the RULE, not the grid location: one unsound
     rule fails at all its instances, so reporting per location floods the
     output while telling you nothing new.  For each rule this aggregates
-    over its instances, distinguishing "wires on different nodes" from
-    "wire has no node here", and prints one summary line per unsound rule
-    (up to max_report), followed by overall statistics.
+    over its instances, classifying each instance as:
+
+      ok        - both wires are on the same node.
+      different - the wires are on two DIFFERENT real nodes: applying the
+                  rule here would merge two unrelated nets.  Never OK.
+      half-dead - exactly one wire has a node (Node.getNode returned null
+                  for the other): applying the rule here would glue a dead
+                  stub wire onto a real node.  Not OK either; prjxray's
+                  check_nodes.py asserts reconstructed nodes contain no
+                  wires the real node lacks.
+      both-dead - NEITHER wire has a node here: applying the rule invents
+                  a phantom node out of wires that are unconnected at this
+                  location.  This is benign and unavoidable in the
+                  tileconn representation -- the same-type tile simply has
+                  less connectivity at this grid location (fabric edge,
+                  hole, clock row), and prjxray's own database creates the
+                  same phantoms when pattern-applied, invisible to its
+                  check_nodes.py which only walks real nodes.
+
+    A rule is unsound if it has any 'different' or 'half-dead' instances.
+    Rules whose only anomalies are 'both-dead' instances are counted and
+    reported separately, not as unsound.
 
     Returns the number of unsound rules.
     """
@@ -170,6 +189,7 @@ def verify_tileconn(device, entries, max_report=20):
 
     total_rules = 0
     unsound_rules = 0
+    phantom_only_rules = 0
 
     for entry in entries:
         type1, type2 = entry['tile_types']
@@ -191,7 +211,7 @@ def verify_tileconn(device, entries, max_report=20):
 
         for wire1, wire2 in entry['wire_pairs']:
             total_rules += 1
-            ok = no_node = mismatch = 0
+            ok = different = half_dead = both_dead = 0
             example = None
 
             for tile1, tile2 in instances:
@@ -200,33 +220,39 @@ def verify_tileconn(device, entries, max_report=20):
                 node1 = Node.getNode(tile1, idx1) if idx1 is not None else None
                 node2 = Node.getNode(tile2, idx2) if idx2 is not None else None
 
-                if node1 is None or node2 is None:
-                    no_node += 1
+                if node1 is None and node2 is None:
+                    both_dead += 1
+                elif node1 is None or node2 is None:
+                    half_dead += 1
+                    if example is None:
+                        example = (tile1.getName(), tile2.getName())
                 elif node1.equals(node2):
                     ok += 1
                 else:
-                    mismatch += 1
+                    different += 1
+                    if example is None:
+                        example = (tile1.getName(), tile2.getName())
 
-                if (node1 is None or node2 is None or mismatch) and \
-                        example is None:
-                    example = (tile1.getName(), tile2.getName())
-
-            if mismatch or no_node:
+            if different or half_dead:
                 unsound_rules += 1
                 if unsound_rules <= max_report:
                     print(
                         'UNSOUND: ({}, {}, {}) {} <-> {}: '
-                        'ok {}, different-node {}, no-node {} '
+                        'ok {}, different {}, half-dead {}, both-dead {} '
                         'of {} instances, e.g. {} <-> {}'.format(
                             type1, type2, entry['grid_deltas'], wire1,
-                            wire2, ok, mismatch, no_node, len(instances),
-                            example[0], example[1]))
+                            wire2, ok, different, half_dead, both_dead,
+                            len(instances), example[0], example[1]))
+            elif both_dead:
+                phantom_only_rules += 1
 
     if unsound_rules > max_report:
         print('... {} more unsound rules not shown'.format(
             unsound_rules - max_report))
     print(
-        '{} of {} rules unsound'.format(unsound_rules, total_rules))
+        '{} of {} rules unsound, {} more benign '
+        '(phantom nodes over dead wires only)'.format(
+            unsound_rules, total_rules, phantom_only_rules))
 
     return unsound_rules
 
