@@ -41,6 +41,9 @@ Usage:
 Add --verify to additionally check that every generated (tile pair, wire
 pair) rule holds at *every* occurrence of that tile-type pattern in the
 grid, i.e. that the file is safe to apply purely by pattern matching.
+Add --drop-unsound to remove the rules that fail that check (e.g.
+fabric-edge "bounce" shortcuts the MST picked up) and rewrite the output
+file with only the sound ones.
 """
 
 import argparse
@@ -202,7 +205,9 @@ def verify_tileconn(device, entries, max_report=20):
     Rules whose only anomalies are 'both-dead' instances are counted and
     reported separately, not as unsound.
 
-    Returns the number of unsound rules.
+    Returns the list of unsound rules as (entry_index, (wire1, wire2))
+    tuples, suitable for drop_unsound_rules().  Its length is the number
+    of unsound rules.
     """
     from com.xilinx.rapidwright.device import Node
 
@@ -212,10 +217,10 @@ def verify_tileconn(device, entries, max_report=20):
             str(tile.getTileTypeEnum().name()), []).append(tile)
 
     total_rules = 0
-    unsound_rules = 0
+    unsound = []
     phantom_only_rules = 0
 
-    for entry in entries:
+    for entry_idx, entry in enumerate(entries):
         type1, type2 = entry['tile_types']
         dx, dy = entry['grid_deltas']
 
@@ -258,8 +263,8 @@ def verify_tileconn(device, entries, max_report=20):
                         example = (tile1.getName(), tile2.getName())
 
             if different or half_dead:
-                unsound_rules += 1
-                if unsound_rules <= max_report:
+                unsound.append((entry_idx, (wire1, wire2)))
+                if len(unsound) <= max_report:
                     print(
                         'UNSOUND: ({}, {}, {}) {} <-> {}: '
                         'ok {}, different {}, half-dead {}, both-dead {} '
@@ -270,15 +275,41 @@ def verify_tileconn(device, entries, max_report=20):
             elif both_dead:
                 phantom_only_rules += 1
 
-    if unsound_rules > max_report:
+    if len(unsound) > max_report:
         print('... {} more unsound rules not shown'.format(
-            unsound_rules - max_report))
+            len(unsound) - max_report))
     print(
         '{} of {} rules unsound, {} more benign '
         '(phantom nodes over dead wires only)'.format(
-            unsound_rules, total_rules, phantom_only_rules))
+            len(unsound), total_rules, phantom_only_rules))
 
-    return unsound_rules
+    return unsound
+
+
+def drop_unsound_rules(entries, unsound):
+    """ Return entries with the given unsound wire pairs removed.
+
+    unsound is the list returned by verify_tileconn().  Entries left with
+    no wire pairs are removed entirely.  The node reconstruction survives
+    dropping a rule as long as the affected nodes are still spanned by
+    their remaining (sound) pairs; compare the result against a reference
+    database with compare_tileconn.py to confirm.
+    """
+    unsound_by_entry = {}
+    for entry_idx, pair in unsound:
+        unsound_by_entry.setdefault(entry_idx, set()).add(tuple(pair))
+
+    filtered = []
+    for entry_idx, entry in enumerate(entries):
+        bad_pairs = unsound_by_entry.get(entry_idx, set())
+        wire_pairs = [
+            pair for pair in entry['wire_pairs']
+            if tuple(pair) not in bad_pairs
+        ]
+        if wire_pairs:
+            filtered.append(dict(entry, wire_pairs=wire_pairs))
+
+    return filtered
 
 
 def main():
@@ -291,7 +322,13 @@ def main():
     parser.add_argument(
         '--verify',
         action='store_true',
-        help='Re-check every rule at every grid location (slow)')
+        help='Re-check every rule at every grid location (slow); '
+        'exit 1 if unsound rules are found')
+    parser.add_argument(
+        '--drop-unsound',
+        action='store_true',
+        help='Verify (implied), remove unsound rules and rewrite the '
+        'output file with only the sound ones')
     args = parser.parse_args()
 
     import rapidwright  # noqa: F401 -- starts the JVM
@@ -308,10 +345,18 @@ def main():
         json.dump(entries, f, indent=4, sort_keys=True)
         f.write('\n')
 
-    if args.verify:
-        errors = verify_tileconn(device, entries)
-        print('verification complete, {} errors'.format(errors))
-        if errors:
+    if args.verify or args.drop_unsound:
+        unsound = verify_tileconn(device, entries)
+
+        if unsound and args.drop_unsound:
+            entries = drop_unsound_rules(entries, unsound)
+            print(
+                'dropped {} unsound rules, {} entries remain'.format(
+                    len(unsound), len(entries)))
+            with open(args.output, 'w') as f:
+                json.dump(entries, f, indent=4, sort_keys=True)
+                f.write('\n')
+        elif unsound:
             exit(1)
 
 
